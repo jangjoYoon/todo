@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>할 일 목록 앱</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        /* 기본 폰트 설정 */
+        body {
+            font-family: 'Inter', sans-serif; /* Tailwind 기본 폰트 스택과 유사하게 */
+        }
+        /* 완료된 항목 스타일 */
+        .completed {
+            text-decoration: line-through;
+            color: #9ca3af; /* gray-400 */
+        }
+        /* 커스텀 스크롤바 (선택 사항) */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* 메시지 박스 스타일 */
+        .message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            font-size: 0.875rem; /* text-sm */
+        }
+        .message-box.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .message-box.error {
+            background-color: #fecaca; /* red-200 */
+            color: #991b1b; /* red-800 */
+        }
+        .message-box.success {
+            background-color: #d1fae5; /* green-200 */
+            color: #065f46; /* green-800 */
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-slate-700 min-h-screen flex flex-col items-center justify-center p-4 text-slate-100">
+
+    <div class="bg-slate-800 shadow-2xl rounded-xl p-6 md:p-8 w-full max-w-lg">
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+                <i class="fas fa-check-double mr-2"></i>나의 할 일 목록
+            </h1>
+        </header>
+
+        <form id="todo-form" class="flex gap-3 mb-6">
+            <input type="text" id="todo-input"
+                   class="flex-grow p-3 border border-slate-600 rounded-lg bg-slate-700 text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none placeholder-slate-400"
+                   placeholder="새로운 할 일을 입력하세요...">
+            <button type="submit"
+                    class="bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white font-semibold py-3 px-5 rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out transform hover:scale-105">
+                <i class="fas fa-plus mr-1"></i> 추가
+            </button>
+        </form>
+
+        <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+            <ul id="todo-list" class="divide-y divide-slate-700">
+                </ul>
+        </div>
+
+        <div class="mt-8 text-center">
+            <button id="clear-all-button"
+                    class="bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-150 ease-in-out transform hover:scale-105">
+                <i class="fas fa-trash-alt mr-1"></i> 모두 삭제
+            </button>
+        </div>
+    </div>
+
+    <div id="message-box" class="message-box"></div>
+
+    <script>
+        // DOM 요소 가져오기
+        const todoForm = document.getElementById('todo-form');
+        const todoInput = document.getElementById('todo-input');
+        const todoList = document.getElementById('todo-list');
+        const clearAllButton = document.getElementById('clear-all-button');
+        const messageBox = document.getElementById('message-box');
+
+        // 할 일 목록을 저장할 배열 (로컬 스토리지에서 불러오거나 새로 생성)
+        let todos = JSON.parse(localStorage.getItem('todos')) || [];
+
+        // 메시지 표시 함수
+        function showMessage(message, type = 'success', duration = 3000) {
+            messageBox.textContent = message;
+            messageBox.className = `message-box ${type} show`; // 기존 클래스에 type과 show 추가
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, duration);
+        }
+
+        // 할 일 목록을 화면에 렌더링하는 함수
+        function renderTodos() {
+            todoList.innerHTML = ''; // 기존 목록 초기화
+            if (todos.length === 0) {
+                const emptyMessage = document.createElement('li');
+                emptyMessage.innerHTML = `
+                    <div class="text-center text-slate-400 py-4">
+                        <i class="fas fa-clipboard-list fa-2x mb-2"></i>
+                        <p>할 일이 없습니다. 새 할 일을 추가해보세요!</p>
+                    </div>
+                `;
+                todoList.appendChild(emptyMessage);
+                clearAllButton.classList.add('hidden'); // 할 일 없을 때 모두 삭제 버튼 숨김
+                return;
+            }
+
+            clearAllButton.classList.remove('hidden'); // 할 일 있으면 버튼 표시
+
+            todos.forEach((todo, index) => {
+                const listItem = document.createElement('li');
+                listItem.className = `flex items-center justify-between p-3 bg-slate-700/50 rounded-lg shadow my-2 transition-all duration-300 ease-in-out hover:bg-slate-600/70 ${todo.completed ? 'completed' : ''}`;
+                listItem.dataset.index = index; // 인덱스를 data 속성으로 저장
+
+                // 할 일 텍스트
+                const taskText = document.createElement('span');
+                taskText.textContent = todo.text;
+                taskText.className = 'flex-grow cursor-pointer';
+                taskText.addEventListener('click', () => toggleComplete(index));
+
+                // 버튼 그룹
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'flex items-center gap-2';
+
+                // 완료/미완료 버튼
+                const completeButton = document.createElement('button');
+                completeButton.innerHTML = todo.completed ? '<i class="fas fa-undo-alt"></i>' : '<i class="fas fa-check"></i>';
+                completeButton.className = `p-2 rounded-md transition-colors duration-150 ${todo.completed ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'}`;
+                completeButton.title = todo.completed ? '미완료로 변경' : '완료로 표시';
+                completeButton.addEventListener('click', () => toggleComplete(index));
+
+                // 삭제 버튼
+                const deleteButton = document.createElement('button');
+                deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+                deleteButton.className = 'p-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors duration-150';
+                deleteButton.title = '삭제';
+                deleteButton.addEventListener('click', () => deleteTask(index));
+
+                buttonGroup.appendChild(completeButton);
+                buttonGroup.appendChild(deleteButton);
+
+                listItem.appendChild(taskText);
+                listItem.appendChild(buttonGroup);
+                todoList.appendChild(listItem);
+            });
+        }
+
+        // 할 일 추가 함수
+        function addTodo(event) {
+            event.preventDefault(); // 폼 제출 기본 동작 방지
+            const taskText = todoInput.value.trim(); // 입력값 공백 제거
+
+            if (taskText === '') {
+                showMessage('할 일을 입력해주세요.', 'error');
+                return;
+            }
+
+            todos.push({ text: taskText, completed: false });
+            todoInput.value = ''; // 입력 필드 초기화
+            saveAndRender();
+            showMessage('할 일이 추가되었습니다.', 'success');
+        }
+
+        // 할 일 완료/미완료 토글 함수
+        function toggleComplete(index) {
+            todos[index].completed = !todos[index].completed;
+            saveAndRender();
+            showMessage(todos[index].completed ? '할 일을 완료했습니다.' : '할 일을 미완료로 변경했습니다.', 'success');
+        }
+
+        // 할 일 삭제 함수
+        function deleteTask(index) {
+            const taskToDelete = todos[index].text;
+            todos.splice(index, 1); // 배열에서 해당 인덱스의 항목 1개 제거
+            saveAndRender();
+            showMessage(`'${taskToDelete}' 할 일이 삭제되었습니다.`, 'success');
+        }
+
+        // 모든 할 일 삭제 함수
+        function clearAllTodos() {
+            if (todos.length === 0) {
+                showMessage('삭제할 할 일이 없습니다.', 'error');
+                return;
+            }
+            if (confirm('정말로 모든 할 일을 삭제하시겠습니까?')) {
+                todos = [];
+                saveAndRender();
+                showMessage('모든 할 일이 삭제되었습니다.', 'success');
+            }
+        }
+
+        // 로컬 스토리지에 저장하고 화면 다시 렌더링하는 함수
+        function saveAndRender() {
+            localStorage.setItem('todos', JSON.stringify(todos));
+            renderTodos();
+        }
+
+        // 이벤트 리스너 등록
+        todoForm.addEventListener('submit', addTodo);
+        clearAllButton.addEventListener('click', clearAllTodos);
+
+        // 페이지 로드 시 할 일 목록 렌더링
+        document.addEventListener('DOMContentLoaded', renderTodos);
+
+        // 반응형 디자인을 위한 뷰포트 높이 조절 (선택 사항: 모바일 주소창 고려)
+        function setAppHeight() {
+            const doc = document.documentElement;
+            doc.style.setProperty('--app-height', `${window.innerHeight}px`);
+        }
+        window.addEventListener('resize', setAppHeight);
+        setAppHeight(); // 초기 로드 시 실행
+    </script>
+</body>
+</html>
